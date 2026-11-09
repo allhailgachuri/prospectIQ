@@ -127,6 +127,8 @@ rate limits, and job quotas have been added. CORS settings alone do not secure a
 
 ## Deploy the Project
 
-For deployment to Render, or a Vercel dashboard with a separately hosted API, follow
-the step-by-step guide in [deployment.md](deployment.md). The repository also
-contains a Render Blueprint in `render.yaml`.
+The dashboard is deployed on Vercel, and the no-card API setup uses a free Hugging
+Face Docker Space. Follow [deployment.md](deployment.md) to connect the API to
+`https://prospecttiq.vercel.app/`. The free API container has temporary storage;
+download reports you need to keep and don't rely on its SQLite database surviving
+restarts.

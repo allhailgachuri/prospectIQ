@@ -1,168 +1,121 @@
-# Deploying ProspectIQ
+# ProspectIQ API: Free Deployment Guide
 
-This guide explains how to publish ProspectIQ for the first time. The project has
-two parts that need to run online:
+Your dashboard is already deployed at <https://prospecttiq.vercel.app/>. The remaining piece is the Python API that supplies dashboard data, discovers businesses, checks websites, and generates reports.
 
-- The **dashboard** is the React website that people open in a browser.
-- The **API** is the Python service that searches OpenStreetMap, reads and writes
-  business records, checks websites, and creates reports.
+This guide uses a **Hugging Face Docker Space** for the API's free CPU tier. It is intended to avoid Render's paid persistent disk and should not require adding a payment card when you choose the free hardware. Hosting providers can change their eligibility and billing rules; if the setup screen asks you to select paid hardware or enter payment details, stop and verify that the Space is set to the free CPU tier. Do not select a paid upgrade.
 
-The recommended beginner setup is the Render Blueprint in `render.yaml`. It creates
-both services and a persistent disk for the SQLite database. Another option is to
-host the dashboard on Vercel and the API on Render.
+## Important Free-Tier Limitation
 
-## Before You Begin
+The API uses SQLite. The free Space's local filesystem is temporary, not persistent storage. The Dockerfile stores its database at `/tmp/prospectiq.db`; that database and generated reports can be erased when the Space restarts, rebuilds, or is recycled. This setup is for trying the API and using it with data you can afford to re-create. It does **not** make saved prospects durable across restarts.
 
-You will need:
+You can download Word and Excel reports after generating them, but don't treat the free container as a permanent archive. For durable always-available storage, a persistent disk or managed database is needed; those options may have charges or account requirements. The current project does not yet support moving its SQLite database to a hosted PostgreSQL service just by changing one setting.
 
-- A GitHub account and this project pushed to a GitHub repository.
-- A Render account for the API and persistent database disk.
-- Optionally, a Vercel account if you prefer to host the dashboard there.
-- A working contact email for the application's public-data request identity.
+## What You Need
 
-Do not upload `.env`, local database files, generated reports, or exports. The
-repository `.gitignore` excludes these local files. Keep API credentials and other
-secrets in the hosting provider's environment-variable settings, never in source
-code or `VITE_*` variables (frontend variables are visible in the browser).
+- Your GitHub repository: <https://github.com/allhailgachuri/prospectIQ>
+- Your deployed dashboard: <https://prospecttiq.vercel.app/>
+- A Hugging Face account.
+- A working contact email for the API's `USER_AGENT` identity.
+- Git installed on your computer.
 
-## Option A: Deploy Both Services with Render
+You do not need to redeploy the dashboard source to a different host. You will need to set one Vercel environment variable and redeploy its production build after the API is ready, because Vite embeds that setting during the build.
 
-### 1. Push the project to GitHub
+## Part 1: Create the Free API Space
 
-Create an empty GitHub repository, then from the project root run the initial push
-commands shown below. Skip `git init` and `git remote add` if you have already done
-those steps. Review `git status` before committing and confirm `.env`, local data,
-and generated reports are not staged.
+1. Sign in to Hugging Face at <https://huggingface.co/>.
+2. Open **Spaces** and choose **Create new Space**.
+3. Choose a repository name such as `prospectiq-api`.
+4. Choose **Docker** as the Space SDK. The repository already contains a root-level `Dockerfile` configured to run FastAPI on port `7860`.
+5. Choose **Public** visibility so the Vercel site can call the API without Hugging Face login. Remember that this also means the API endpoints are publicly reachable. See the security warning below.
+6. Select the free CPU/basic hardware option. Do not select a paid GPU or upgrade.
+7. Create the Space. Hugging Face will show you its Git URL, similar to:
+   `https://huggingface.co/spaces/YOUR_HF_USERNAME/prospectiq-api`.
 
-```powershell
-git init
-git add .
-git commit -m "Created ProspectIQ"
-git branch -M main
-git remote add origin https://github.com/allhailgachuri/prospectIQ.git
-git push -u origin main
-```
+If the Space creation flow asks for a payment card even though free CPU hardware is selected, do not continue with a paid option. Check Hugging Face's current free-tier/account requirements first; these policies can change.
 
-For later updates, use `git add .`, `git commit -m "Describe your change"`, and
-`git push`; do not repeat `git init` or `git remote add`.
+## Part 2: Push This Project to the Space
 
-### 2. Create the Render services
-
-1. Sign in to Render and choose **New** then **Blueprint**.
-2. Connect the GitHub repository containing ProspectIQ.
-3. Render reads `render.yaml` from the repository root and shows the services it
-   will create. Review the names and settings before confirming.
-4. When asked for `USER_AGENT`, enter a descriptive client name and a working email
-   address, for example `ProspectIQ/1.0 (research; contact: you@example.com)`.
-5. Confirm the API service, static dashboard service, and `prospectiq-data` disk.
-   A persistent disk may incur a charge. Keep the disk attached to one API instance
-   because this deployment uses SQLite.
-6. Wait for both deployments to finish. The first build can take several minutes.
-
-### 3. Check environment settings
-
-The Blueprint sets these values for the API:
-
-- `DATABASE_PATH=/var/data/prospectiq.db` so records survive service restarts.
-- `FRONTEND_ORIGINS=https://prospectiq-dashboard.onrender.com` so the dashboard
-  origin is allowed to call the API.
-- `USER_AGENT` is supplied privately when Render prompts for it.
-
-The dashboard build uses `VITE_API_URL=https://prospectiq-api.onrender.com/api`.
-If you rename either service or attach a custom domain, update the corresponding
-URL and allowed origin in the Render service settings, then redeploy.
-
-### 4. Verify the deployment
-
-1. Open `https://prospectiq-api.onrender.com/docs`. The FastAPI documentation page
-   should load.
-2. Open `https://prospectiq-dashboard.onrender.com`. The dashboard should load and
-   show data after its API request completes.
-3. Open **Prospects**, then verify search and filters work.
-4. Open **Run Pipeline** and check the available area presets. Start with a small
-   area because the public Overpass service can be busy.
-5. Generate a report and confirm both Word and Excel files appear under **Reports**.
-
-If the dashboard loads but shows no data, check `VITE_API_URL`, the API service
-logs, and `FRONTEND_ORIGINS`. The allowed origin must exactly match the browser's
-dashboard URL, including `https://` and excluding any path. CORS is not a security
-or authentication mechanism.
-
-## Option B: Vercel Dashboard and Render API
-
-Use this option if you want Vercel to host the static React dashboard. Vercel does
-not run this project's FastAPI service as a static Vite build, so the API still
-needs to be deployed on Render or another Python-capable host.
-
-### 1. Deploy the API
-
-Create the `prospectiq-api` web service on Render from the repository root:
-
-- Runtime: Python
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
-- Persistent disk mount: `/var/data`
-- `DATABASE_PATH`: `/var/data/prospectiq.db`
-- `USER_AGENT`: a private value with a working contact email
-
-Set `FRONTEND_ORIGINS` after Vercel creates the dashboard URL. Enter only the
-exact dashboard origin, such as `https://prospect-iq.vercel.app`.
-
-### 2. Deploy the dashboard
-
-1. In Vercel, import the same GitHub repository.
-2. Set the project **Root Directory** to `dashboard`.
-3. Select the Vite preset, build command `npm run build`, and output directory `dist`.
-4. Add the build-time environment variable `VITE_API_URL` with the full API URL
-   ending in `/api`, for example `https://prospectiq-api.onrender.com/api`.
-5. Deploy the dashboard. The `dashboard/vercel.json` file routes browser page
-   refreshes back to the React app.
-6. Copy the resulting Vercel origin into the Render API's `FRONTEND_ORIGINS`, save,
-   and redeploy the API.
-
-If you use Vercel preview deployments, add only the preview origins you intend to
-allow. Do not use a wildcard CORS origin for a production deployment.
-
-## Updating the Live Website
-
-After changing the code, from the project root:
+The existing Git repository already has GitHub as its `origin`. Add the Hugging Face Space as a second remote, replacing `YOUR_HF_USERNAME` with your Hugging Face username. Run these commands from the project root (the folder containing `Dockerfile`, `api/`, and `prospectiq/`):
 
 ```powershell
 git status
-git add .
-git commit -m "Describe the update"
-git push
+git remote add hf https://huggingface.co/spaces/YOUR_HF_USERNAME/prospectiq-api
+git push hf main
 ```
 
-Render and Vercel normally rebuild automatically after a push to the connected
-branch. Check each provider's deployment log if a build fails.
-
-## Local Build Checks
-
-Before pushing an update, you can run:
+If Git says the `hf` remote already exists, don't add it again. Check it with:
 
 ```powershell
-py -m pytest -q
-cd dashboard
-npm ci
-npm run build
+git remote -v
 ```
 
-Run the API from the project root and the Vite dashboard from `dashboard/` when
-testing locally. The dashboard uses port `6060`; the API uses port `8000`.
+When Git asks you to authenticate, use your Hugging Face username and a Hugging Face **write** access token as the password. Create the token in Hugging Face account settings, grant only the repository-write permission needed, and enter it directly in the terminal credential prompt. Do not put the token in a command, source file, README, or Vercel variable. If you haven't committed the latest Docker files yet, commit and push them to GitHub first, then push the same `main` branch to the `hf` remote.
 
-## Important Product Limits
+Hugging Face will build the Docker image after the push. In the Space's **Logs** tab, wait for the build to finish and for the app to start. The Dockerfile installs `requirements.txt`, copies only the Python API and engine, and starts Uvicorn on port `7860`.
 
-- Discovery uses OpenStreetMap's shared public Overpass service. Coverage is not
-  exhaustive and large or repeated requests may be throttled.
-- A custom discovery area is limited to 0.5 degrees per side and 0.15 square
-  degrees overall. Collect larger regions as multiple smaller areas.
-- A website not listed in OpenStreetMap may still exist. Website checks are
-  lightweight and check only public homepages.
-- The current API has no login or agency-specific data separation. Do not share it
-  publicly as a multi-user product until authentication, tenant isolation, rate
-  limits, and job quotas are implemented.
-- SQLite on a persistent Render disk is appropriate for a small, single-instance
-  deployment. A larger multi-user service should migrate to a managed database.
-- Attribute OpenStreetMap and follow ODbL terms when redistributing derived data.
-  Follow applicable privacy, marketing, and opt-out requirements before outreach.
+## Part 3: Set the API Environment Variables
+
+In the Space, open **Settings** and find the variables/secrets section. Add:
+
+| Name               | Value                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| `USER_AGENT`       | `ProspectIQ/1.0 (business research; contact: YOUR_REAL_EMAIL)` |
+| `FRONTEND_ORIGINS` | `https://prospecttiq.vercel.app`                               |
+| `DATABASE_PATH`    | `/tmp/prospectiq.db`                                           |
+
+Replace `YOUR_REAL_EMAIL` with an email address you can access. `USER_AGENT` identifies requests made to public data services; it is not a password. Add these values as Space variables/secrets, not in Git. The Dockerfile already defaults `DATABASE_PATH` to `/tmp/prospectiq.db`, but setting it explicitly in the Space makes the temporary-storage behavior clear. Saving environment variables usually triggers a restart or rebuild.
+
+`FRONTEND_ORIGINS` must exactly match your Vercel site's origin: `https://prospecttiq.vercel.app`. Do not add a trailing slash or a page path. CORS controls which browser origins may read API responses; it is not login or authentication.
+
+## Part 4: Verify the API
+
+Open the Space page and copy its public app URL. Hugging Face commonly displays an address ending in `.hf.space`; use the exact URL shown for your Space. For example, if its app URL is `https://YOUR_SPACE_HOST.hf.space`, check:
+
+```text
+https://YOUR_SPACE_HOST.hf.space/docs
+https://YOUR_SPACE_HOST.hf.space/api/stats
+```
+
+The first should show FastAPI documentation. The second should return JSON containing statistics such as `total`, `by_category`, and `by_neighbourhood`. A new free Space starts with a new, empty SQLite database, so `total: 0` is expected until you run discovery. A sleeping free Space can take a little while to wake on the first request.
+
+If `/docs` does not load, inspect the Space's **Logs** for image-build or startup errors. If `/docs` works but `/api/stats` does not return JSON, check the API logs and confirm that the Docker Space is running the latest `main` branch.
+
+## Part 5: Connect the Existing Vercel Dashboard
+
+1. In Vercel, open the project that serves `https://prospecttiq.vercel.app/`.
+2. Open **Settings → Environment Variables**.
+3. Add `VITE_API_URL` for the **Production** environment. Set its value to the exact Space app URL followed by `/api`, for example:
+   ```text
+   https://YOUR_SPACE_HOST.hf.space/api
+   ```
+   Do not include `/stats` at the end; the dashboard adds API paths itself.
+4. Save the variable.
+5. Open **Deployments**, choose the latest production deployment, and redeploy it so the Vite build receives the new variable. Alternatively, push a new commit to the connected GitHub branch after setting the variable; Vercel will build again.
+6. Visit <https://prospecttiq.vercel.app/> and reload. The dashboard should show API statistics. Then try Prospects and the API-backed pages.
+
+The frontend setting is named `VITE_API_URL` because this project uses Vite. It is public in the downloaded browser code, so never put passwords or private API tokens in it.
+
+## Troubleshooting
+
+**Dashboard says the API response is invalid.** Open `/api/stats` directly using the Space URL. If it doesn't return JSON, fix the Space first. If it does return JSON, confirm Vercel's `VITE_API_URL` equals the Space URL ending in `/api`, and redeploy Vercel.
+
+**Browser reports a CORS error.** In Space settings, set `FRONTEND_ORIGINS` to exactly `https://prospecttiq.vercel.app`, save, wait for the API to restart, and reload the dashboard. Don't put the API URL in `FRONTEND_ORIGINS`; that setting is for the frontend origin.
+
+**First API request is slow.** A free Space may be sleeping when idle. Wait for it to wake, then reload. This may happen again after periods of inactivity.
+
+**Prospects disappear.** That is the expected limitation of temporary free storage. The SQLite database is in `/tmp` and can be reset by a restart, rebuild, or host recycling. Download reports you need to keep. To retain data across restarts, choose a persistent storage service and budget for any associated cost; do not assume the free Space's container filesystem is permanent.
+
+**The API is public.** Public visibility allows the Vercel browser to call it without Hugging Face login, but anyone who finds its URL may also call its endpoints. This project's API currently has no user authentication, tenant isolation, or request quotas. Do not store confidential client data or treat this as a secure multi-agency service. Add authentication and abuse protection before inviting other users or relying on it for sensitive business workflows.
+
+## Future Updates
+
+When you change the API code, push the commit to GitHub and then push it to the Hugging Face Space remote so the API image rebuilds:
+
+```powershell
+git add .
+git commit -m "Describe the API update"
+git push origin main
+git push hf main
+```
+
+When you change only the dashboard, pushing to GitHub should trigger Vercel's connected deployment. If you change Vercel environment variables, redeploy so the new values are compiled into the frontend.
