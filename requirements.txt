@@ -1,0 +1,19 @@
+# ProspectIQ runtime dependencies
+# Install: pip install -r requirements.txt
+
+# HTTP
+requests==2.34.2
+
+# Environment variables
+python-dotenv==1.2.4
+
+# Word document generation (Phase 5)
+python-docx==1.1.2
+openpyxl==3.1.5
+
+# FastAPI + server (Phase 6)
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+
+# Data processing (Phase 4+)
+# (no pandas/numpy needed for Phase 1 — keeping it lean)

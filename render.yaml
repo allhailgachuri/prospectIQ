@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: prospectiq-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /docs
+    disk:
+      name: prospectiq-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_PATH
+        value: /var/data/prospectiq.db
+      - key: FRONTEND_ORIGINS
+        value: https://prospectiq-dashboard.onrender.com
+      - key: USER_AGENT
+        sync: false
+
+  - type: web
+    name: prospectiq-dashboard
+    runtime: static
+    rootDir: dashboard
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://prospectiq-api.onrender.com/api

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment secrets — NEVER commit
+.env
+
+# Data and exports (too large / contain business data)
+data/
+exports/
+reports/
+logs/
+prospectiq/ProspectIQ_Nairobi_Businesses.csv
+
+# Frontend build and hosting output
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vercel/
+.vercel/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
