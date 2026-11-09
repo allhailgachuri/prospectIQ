@@ -29,6 +29,7 @@ export function Analytics() {
     data: stats,
     isLoading,
     isError,
+    error,
   } = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   if (isLoading)
     return (
@@ -39,7 +40,9 @@ export function Analytics() {
   if (isError || !stats)
     return (
       <div className="py-20 text-center text-slate-500">
-        Analytics data is unavailable.
+        {error instanceof Error
+          ? error.message
+          : "Analytics data is unavailable. Check that the ProspectIQ API is running."}
       </div>
     );
 

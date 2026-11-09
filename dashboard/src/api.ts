@@ -26,8 +26,44 @@ export interface BusinessQuery {
   page_size?: number;
 }
 
-export const fetchStats = (): Promise<Stats> =>
-  api.get("/stats").then((r) => r.data);
+const asCount = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+const asArray = <T>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : [];
+
+export const fetchStats = async (): Promise<Stats> => {
+  const { data } = await api.get<unknown>("/stats");
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(
+      "The API returned an invalid response. In Vercel, set VITE_API_URL to your deployed backend URL ending in /api, then redeploy the dashboard.",
+    );
+  }
+
+  const payload = data as Record<string, unknown>;
+  if (typeof payload.total !== "number") {
+    throw new Error(
+      "The API response is missing dashboard statistics. In Vercel, set VITE_API_URL to your deployed backend URL ending in /api, then redeploy the dashboard.",
+    );
+  }
+  return {
+    total: asCount(payload.total),
+    with_website: asCount(payload.with_website),
+    without_website: asCount(payload.without_website),
+    with_phone: asCount(payload.with_phone),
+    with_email: asCount(payload.with_email),
+    total_checked: asCount(payload.total_checked),
+    by_category: asArray<Stats["by_category"][number]>(payload.by_category),
+    by_neighbourhood: asArray<Stats["by_neighbourhood"][number]>(
+      payload.by_neighbourhood,
+    ),
+    website_statuses: asArray<Stats["website_statuses"][number]>(
+      payload.website_statuses,
+    ),
+    audit_labels: asArray<Stats["audit_labels"][number]>(payload.audit_labels),
+    crm_statuses: asArray<Stats["crm_statuses"][number]>(payload.crm_statuses),
+  };
+};
 
 export const fetchFilters = (): Promise<Filters> =>
   api.get("/filters").then((r) => r.data);

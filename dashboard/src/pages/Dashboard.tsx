@@ -62,6 +62,7 @@ export function Dashboard() {
     data: stats,
     isLoading,
     isError,
+    error,
   } = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
 
   if (isLoading)
@@ -73,7 +74,9 @@ export function Dashboard() {
   if (isError || !stats)
     return (
       <div className="py-20 text-center text-slate-500">
-        Dashboard data is unavailable. Check that the ProspectIQ API is running.
+        {error instanceof Error
+          ? error.message
+          : "Dashboard data is unavailable. Check that the ProspectIQ API is running."}
       </div>
     );
 
